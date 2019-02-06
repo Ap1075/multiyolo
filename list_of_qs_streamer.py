@@ -11,27 +11,33 @@ import glob
 import time
 import sched
 import configparser
+from multiprocessing import Event 
 
 class Streamer():
     
-    def __init__(self, directory):
+    def __init__(self, directory, latest_files):
         self.directory = directory
     
-    def simpler(self, l, stream_name, latest_files, wait, list_length):
+    def simpler(self, stream_name, f_q,  wait, ml, list_length):
         known_latest = []           #
         print(multiprocessing.current_process())
         path = stream_name.get()
+        l = multiprocessing.Lock()
         # count = 0   
         try:
             while True:
                 newest_file = max(glob.glob(path+"/*"), key=os.path.getctime)
                 if len(known_latest)<list_length:
                     if str(newest_file) not in known_latest:         #
+                        ml.acquire()
                         l.acquire()
                         known_latest.append(str(newest_file))
-                        latest_files.put(newest_file)
-                        print("written to queue, releasing lock")
+                        # output.put(newest_file)
+                        f_q.put(newest_file)
+                        print("writing to queues done, releasing lock")
+                        print("here's output", f_q)
                         l.release()
+                        ml.release()
                     else:
                         print("waiting for file now...")
                         # print(latest_files.get())
@@ -43,40 +49,58 @@ class Streamer():
         except KeyboardInterrupt:
             print("Stopped by user")
 
-    def repeater(self, return_num, sc):
+    def repeater(self, return_num):
         # while True:
-        return_num = len(os.listdir(self.directory))
-        return return_num
-        s.enter(60,1,repeater, (sc,))
+        return_num.value = len(os.listdir(self.directory))
+        Timer(10,repeater, [return_num]).start()
+
 
             # print("written*************************")
             # print("repeater_output*******************************: ", return_num.value)
             # time.sleep(30)
+    def dump_queue(self,queue):
+        """
+        Empties all pending items in a queue and returns them in a list.
+        """
+        result = []
 
+        for i in iter(queue.get, 'STOP'):
+            result.append(i)
+        # time.sleep(.1)
+        return result
 
 if __name__=='__main__':
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read('./config.ini')
 
     path_to_rec = config["DEFAULT"]["path_to_rec"]
     wait = int(config["DEFAULT"]["wait_time"])
     list_length = int(config["DEFAULT"]["list_length"])
 
-    streamer = Streamer(path_to_rec)
+    myResults = multiprocessing.Manager().list()
+    streamer = Streamer(path_to_rec, myResults)
     myStreams = multiprocessing.Queue()
-    myResults = multiprocessing.Queue()
-    lock = multiprocessing.Lock()
+
+    main_lock = multiprocessing.Lock()
+    # lock = multiprocessing.Lock()
     for stream in glob.glob(os.path.join(path_to_rec+"/*")):
         myStreams.put(stream)
-    # workers = [multiprocessing.Process(target=streamer.latest_provider, args=(lock, myStreams, myResults)) for i in range(n)]
+
     n = len(os.listdir(streamer.directory))   #for each stream, a process would be started 
+    final_q = [multiprocessing.Queue()] * n    # initializing n queues, for each stream, this list is the final OUTPUT
+
     workers = []
     processes = {}
     m=0
     
+    # n=int(return_num.value)
+
     for i in range(n):
-        work = multiprocessing.Process(target=streamer.simpler, args=(lock, myStreams, myResults, wait, list_length))
+        work = multiprocessing.Process(target=streamer.simpler, args=(myStreams,final_q[i], wait,main_lock, list_length))
+        work.name
         work.start()
+        # work.join()
+        # work.daemon = True
         processes[n] = (work, i)
         m+=1
         workers.append(work)
@@ -104,8 +128,9 @@ if __name__=='__main__':
     # for worker in workers:
     #     check = multiprocessing.Process(target=streamer.check_status, args=(worker,))
     #     check.start()
-    for i in range(n):
-        print(myResults.get())
+  
+    # for i in range(n):
+    #     print("Final queue containing queues for each stream: ", final_q.get())
 
     for worker in workers:
         if worker.is_alive() == False:
