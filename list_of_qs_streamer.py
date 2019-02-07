@@ -18,30 +18,21 @@ class Streamer():
     def __init__(self, directory, latest_files):
         self.directory = directory
     
-    def simpler(self, stream_name, f_q,  wait, ml, list_length):
+    def simpler(self, stream_name, f_q,  wait, list_length):
         known_latest = []           #
         print(multiprocessing.current_process())
         path = stream_name.get()
-        l = multiprocessing.Lock()
-        # count = 0   
         try:
             while True:
                 newest_file = max(glob.glob(path+"/*"), key=os.path.getctime)
                 if len(known_latest)<list_length:
                     if str(newest_file) not in known_latest:         #
-                        ml.acquire()
-                        l.acquire()
                         known_latest.append(str(newest_file))
-                        # output.put(newest_file)
                         f_q.put(newest_file)
                         print("writing to queues done, releasing lock")
-                        print("here's output", f_q)
-                        l.release()
-                        ml.release()
+                        print("here's the output", f_q)
                     else:
                         print("waiting for file now...")
-                        # print(latest_files.get())
-                        # print("The output queue is empty?",latest_files.empty())
                         time.sleep(wait)
                         continue
                 else:
@@ -58,16 +49,6 @@ class Streamer():
             # print("written*************************")
             # print("repeater_output*******************************: ", return_num.value)
             # time.sleep(30)
-    def dump_queue(self,queue):
-        """
-        Empties all pending items in a queue and returns them in a list.
-        """
-        result = []
-
-        for i in iter(queue.get, 'STOP'):
-            result.append(i)
-        # time.sleep(.1)
-        return result
 
 if __name__=='__main__':
     config = configparser.ConfigParser()
@@ -81,13 +62,14 @@ if __name__=='__main__':
     streamer = Streamer(path_to_rec, myResults)
     myStreams = multiprocessing.Queue()
 
-    main_lock = multiprocessing.Lock()
-    # lock = multiprocessing.Lock()
     for stream in glob.glob(os.path.join(path_to_rec+"/*")):
         myStreams.put(stream)
 
     n = len(os.listdir(streamer.directory))   #for each stream, a process would be started 
-    final_q = [multiprocessing.Queue()] * n    # initializing n queues, for each stream, this list is the final OUTPUT
+    final_q = []    # initializing n queues, for each stream, this list is the final OUTPUT
+    for i in range(n):
+        final_q.append(multiprocessing.Queue())
+
 
     workers = []
     processes = {}
@@ -96,7 +78,7 @@ if __name__=='__main__':
     # n=int(return_num.value)
 
     for i in range(n):
-        work = multiprocessing.Process(target=streamer.simpler, args=(myStreams,final_q[i], wait,main_lock, list_length))
+        work = multiprocessing.Process(target=streamer.simpler, args=(myStreams,final_q[i], wait, list_length)) #main_lock
         work.name
         work.start()
         # work.join()
@@ -131,7 +113,6 @@ if __name__=='__main__':
   
     # for i in range(n):
     #     print("Final queue containing queues for each stream: ", final_q.get())
-
     for worker in workers:
         if worker.is_alive() == False:
             worker.start()
