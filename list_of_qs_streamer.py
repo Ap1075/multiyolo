@@ -20,8 +20,9 @@ class Streamer():
     
     def simpler(self, stream_name, f_q,  wait, list_length):
         known_latest = []           #
-        print(multiprocessing.current_process())
         path = stream_name.get()
+        multiprocessing.current_process().name = path
+        print(multiprocessing.current_process())
         try:
             while True:
                 newest_file = max(glob.glob(path+"/*"), key=os.path.getctime)
@@ -29,10 +30,10 @@ class Streamer():
                     if str(newest_file) not in known_latest:         #
                         known_latest.append(str(newest_file))
                         f_q.put(newest_file)
-                        print("writing to queues done, releasing lock")
-                        print("here's the output", f_q)
+                        print("writing to queue done, releasing lock")
+                        # print("here's the output", f_q)
                     else:
-                        print("waiting for file now...")
+                        print("waiting for {} file now...".format(multiprocessing.current_process().name))
                         time.sleep(wait)
                         continue
                 else:
@@ -79,7 +80,7 @@ if __name__=='__main__':
 
     for i in range(n):
         work = multiprocessing.Process(target=streamer.simpler, args=(myStreams,final_q[i], wait, list_length)) #main_lock
-        work.name
+        # work.name
         work.start()
         # work.join()
         # work.daemon = True
